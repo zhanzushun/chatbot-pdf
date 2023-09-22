@@ -1,0 +1,94 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+html,
+body {
+    margin: 0;
+    background-image: linear-gradient(to right, #fff9e0, #fffdf0);
+}
+
+h1 {
+    font-family: "KaiTi", "Microsoft YaHei", Arial, sans-serif;
+    font-size: 36px;
+    text-align: center;
+    color: #333;
+    padding: 0;
+    margin: 0;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+a {
+    text-decoration: none;
+}
+
+.title-container {
+    display: flex;
+    align-items: center;
+    max-width: 1000px;
+    padding: 20px;
+    margin: 0 auto;
+}
+
+.title-icon {
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+}
+
+.title {
+    text-align: center;
+    margin-right: auto;
+    margin-left: auto;
+    width: 100%;
+}
+
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-image: linear-gradient(to right, #fff9e0, #fffdf0);
+}
+
+.panel {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    padding: 30px;
+    min-width: 500px;
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.button {
+    display: flex;
+    text-align: center;
+    text-decoration: none;
+    transition: background-color 0.3s;
+    justify-content: center;
+    align-items: center;
+    border-radius: 5px;
+    color: #fff;
+    cursor: pointer;
+    user-select: none;
+    padding: 10px 15px;
+}
+
+.line {
+    border-top: 1px solid black;
+    width: 80%;
+    margin: auto;
+    margin-top: 0px;
+    margin-bottom: 0px;
+  }

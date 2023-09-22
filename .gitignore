@@ -1,0 +1,9 @@
+.DS_Store
+node_modules
+build
+build.tar.gz
+src/Consts.js
+
+backend/config.py
+*.pyc
+__pycache__
