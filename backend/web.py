@@ -135,7 +135,7 @@ async def ask_doc(request: Request):
 格式为 {"类别":"做总结"} 或者 {"类别":"普通问答"}，【问题】如下【问题】如下:"""
 
     prompt = prompt + query_str
-    question_type = await proxy_sync(user_name, prompt, 'gpt-3.5-turbo')
+    question_type = await proxy_sync(user_name, prompt, 'gpt-4')
     logging.info(f'question_type={question_type}')
     if ('做总结' in question_type):
         logging.info('问题是总结类')
