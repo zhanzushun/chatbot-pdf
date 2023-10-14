@@ -8,35 +8,39 @@ export const FileUpload = ({ onFileIdList }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [doing, setDoing] = useState(false);
+  const [message, setMessage] = useState('上传文件并生成词嵌入');
 
-  // Event handler for file upload
-  const handleFileUpload = (event) => {
-    // Create a new FormData object
+  const handleFileUpload = async (event) => {
     let formData = new FormData();
-
-    // Add all selected files to the FormData object
     for (let file of event.target.files) {
       formData.append('files', file);
     }
-
-    // Send a POST request to your backend service
-    console.log('Uploading files...')
-    setDoing(true)
-    axios.post(`${API_HOST_PORT}/api7/uploadfile`, formData, {timeout: 1000*600})
-      .then(response => {
-        console.log(response.data);
-        // After a successful upload, fetch the list of uploaded files again
-        fetchUploadedFiles();
-        setDoing(false)
-      })
-      .catch((error) => {
-        console.error('Error:', error);
-        window.alert(error)
-        setDoing(false)
-      });
+    try {
+      const response = await axios.post(`${API_HOST_PORT}/api7/uploadfile`, formData);
+      const file_id = response.data.task_id;
+      console.log('upload.response=' + JSON.stringify(response.data))
+      if ('task_id' in response.data){
+        const es = new EventSource(`${API_HOST_PORT}/api7/status/${file_id}`);
+        es.onmessage = (event) => {
+            if (event.data === "done") {
+                setMessage((prevMessages) => '上传文件并生成词嵌入');
+                es.close();
+                setDoing(false)
+                fetchUploadedFiles()
+            }
+            else {
+              setMessage((prevMessages) => event.data);
+            }
+        };
+      }
+      else if ('filename' in response.data){
+        window.alert('该文件已存在: ' + response.data.uploadtime + " " + response.data.filename)
+      }
+    } catch (error) {
+        console.error("Error during the POST request:", error);
+    }
   };
 
-  // Function to fetch the list of uploaded files from the server
   const fetchUploadedFiles = () => {
     axios.post(`${API_HOST_PORT}/api7/getfiles`)
       .then(response => {
@@ -47,15 +51,15 @@ export const FileUpload = ({ onFileIdList }) => {
       });
   };
 
-  const handleFileSelection = (event, timestamp) => {
+  const handleFileSelection = (event, file_id) => {
     if (event.target.checked) {
       if (selectedFiles.length >= 10) {
         window.alert('目前只支持最多选择10个文档')
         return
       }
-      setSelectedFiles(prevSelected => [...prevSelected, timestamp])
+      setSelectedFiles(prevSelected => [...prevSelected, file_id])
     } else {
-      setSelectedFiles(prevSelected => prevSelected.filter(t => t !== timestamp))
+      setSelectedFiles(prevSelected => prevSelected.filter(t => t !== file_id))
     }
   };
 
@@ -76,19 +80,19 @@ export const FileUpload = ({ onFileIdList }) => {
       }
       { !doing && 
       <div className='button button-nonvip' onClick={() => document.getElementById('fileInput').click()}>
-        上传文件并生成词嵌入<br/>(耐心等待)</div>
+        {message}<br/>(耐心等待)</div>
       }
 
       <input type="file" id="fileInput" multiple onChange={handleFileUpload} style={{ display: 'none' }} />
-      <div>.mp3, .mp4, .m4a, .wav, .pdf, .docx, .doc, .txt</div>
+      <div className="small-font">.mp3, .mp4, .m4a, .wav, .pdf, .docx, .doc, .ppt, .pptx, .txt, .png, .jpg, .jpeg</div>
 
       {/* Section for document library */}
       <h2>文档库</h2>
-      <ul className="file-list">
+      <ul className="file-list small-font">
         {uploadedFiles.map((file, index) =>
           <li key={index}>
-            <input type="checkbox" value={file.selected} onChange={event => handleFileSelection(event, file.timestamp)} />
-            <span>{file.uploadtime} - {file.filename}</span>
+            <input type="checkbox" value={file.selected} onChange={event => handleFileSelection(event, file.file_id)} />
+            <span><a href={file.url} target='_blank'>{file.uploadtime} - {file.filename}</a></span>
           </li>
         )}
       </ul>

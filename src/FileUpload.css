@@ -11,6 +11,10 @@
     background-color: white;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   }
+
+  .small-font {
+    font-size: 12px;
+  }
   
   .file-upload-container input[type="file"] {
     margin-bottom: 20px;
