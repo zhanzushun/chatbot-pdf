@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 import aiohttp
 import logging
 
-async def proxy(user, prompt, model):
+async def proxy(user, prompt, model) -> StreamingResponse:
     generator = proxy_generator(user, prompt, model)
     return StreamingResponse(generator)
 

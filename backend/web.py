@@ -125,7 +125,7 @@ async def ask_doc(request: Request):
         logging.info('适合向量搜索的具体问题')
         file_id = file_id_list[0]
         try:
-            return embedchain_util.ask_doc(embedchain_app, file_id_list, query_str)
+            return await embedchain_util.ask_doc(user_name + '.ask_doc', embedchain_app, file_id_list, query_str)
         except Exception as e:
             if str(e) == 'no_query_result':
                 logging.error('no_query_result')

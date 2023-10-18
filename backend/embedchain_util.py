@@ -143,7 +143,7 @@ def embed_doc(app: EcApp, file_id, txt_content):
         logging.info(f'batch={batch_idx}, app.db.cnt={app.db.count()}')
 
 
-def ask_doc_generator(app:EcApp, file_id_list, query_str):
+def query_doc(app:EcApp, file_id_list, query_str):
 
     if (len(file_id_list) == 1):
         where = {"file_id": file_id_list[0]}
@@ -159,16 +159,26 @@ def ask_doc_generator(app:EcApp, file_id_list, query_str):
     if len(contexts) == 0:
         raise Exception('no_query_result')
     logging.info(f'query db result: {contexts}')
+    return contexts
 
-    response = appQuery.llm.query(input_query=query_str, contexts=contexts, config=BaseLlmConfig(stream=True, model='gpt-4'), dry_run=False)
-    for s in response:
-        yield str(s)
 
 from fastapi.responses import StreamingResponse
+import openai_proxy
 
-def ask_doc(ecapp, file_id_list, query_str):
-    generator = ask_doc_generator(ecapp, file_id_list, query_str)
-    return StreamingResponse(generator)
+async def ask_doc(user_name, ecapp, file_id_list, query_str) -> StreamingResponse:
+
+    context_list = query_doc(ecapp, file_id_list, query_str)
+    prompt = f"""
+  Use the following pieces of context to answer the query at the end.
+  If you don't know the answer, just say that you don't know, don't try to make up an answer.
+
+{' | '.join(context_list)}
+
+  Query: {query_str}
+
+  Helpful Answer:
+"""
+    return await openai_proxy.proxy(user_name, prompt, 'gpt-4')
 
 
 from embedchain.config import ChromaDbConfig
