@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Request,BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Request, BackgroundTasks, Body
 from fastapi.responses import JSONResponse, StreamingResponse
 import uuid
 from typing import Dict
@@ -8,7 +8,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import logging
 import os
 
-import embed
 import config
 
 import hashlib
@@ -55,7 +54,7 @@ UPLOAD_URL_FOLDER = f'{config.UPLOAD_HOST_PORT}/api7/static/uploaded/'
 files_db: Dict[str, Dict[str, str]] = {}
 
 def save_to_file():
-    with open("files_db.json", "w") as f:
+    with open(config.APP_NAME + "_files_db.json", "w") as f:
         json.dump(files_db, f, indent=2)
 
 scheduler = BackgroundScheduler()
@@ -66,7 +65,7 @@ scheduler.start()
 async def load_db():
     global files_db
     try:
-        with open("files_db.json", "r") as f:
+        with open(config.APP_NAME + "_files_db.json", "r") as f:
             files_db = json.load(f)
     except FileNotFoundError:
         pass
@@ -79,21 +78,26 @@ from typing import List
 from datetime import datetime
 from pathlib import Path
 
-from work import proxy_sync, proxy
+import openai_proxy
+import convert_to_txt
+import embedchain_util
 
-def get_file_content(file_path):
-    with open(file_path, "r") as f:
-        return f.read()
-    
+embedchain_app = embedchain_util.create_embedchain_app(config.APP_NAME + "_db")
+
 def get_full_txt(file_id):
     file_url = files_db[str(file_id)]['url']
     local_file_path = file_url.replace(UPLOAD_URL_FOLDER, UPLOAD_LOCAL_FOLDER)
+    full_txt = _get_full_txt(file_id, local_file_path)
+    MAX_SIZE = 6000
+    return full_txt[:MAX_SIZE]
+
+
+def _get_full_txt(file_id, local_file_path):
     file_ext = Path(local_file_path).suffix
     if (file_ext != '.txt'):
         local_file_path = os.path.join(os.path.dirname(local_file_path), 'tmp_files', f'{str(file_id)}{file_ext}.txt')
     logging.info(f'local txt file={local_file_path}')
-    MAX_SIZE = 6000
-    return get_file_content(local_file_path)[:MAX_SIZE]
+    return convert_to_txt.read_txt_file(local_file_path)
 
 
 @app.post("/api7/askdoc")
@@ -107,25 +111,29 @@ async def ask_doc(request: Request):
 
     if (file_id_list is None) or len(file_id_list) == 0:
         logging.info('未选择文件，转发到普通对话')
-        return await proxy(user_name + '.chat', query_str, 'gpt-3.5-turbo')
+        return await openai_proxy.proxy(user_name + '.chat', query_str, 'gpt-3.5-turbo')
 
     prompt = """判断以下输入【问题】的类别，总共有两种类别，一种是【适合向量搜索的具体问题】，另一种是【不适合向量搜索且是概括总结类问题】请仔细分析进行判断。
 你只需要输出最终答案，无需给出分析过程，最终答案采用json格式返回，格式为 {"类别":"适合向量搜索的具体问题"} 或者 {"类别":"不适合向量搜索且是概括总结类问题"}。【问题】如下: """
     prompt = prompt + query_str
 
-    question_type = await proxy_sync(user_name + ".judge", prompt, 'gpt-4')
+    question_type = await openai_proxy.proxy_sync(user_name + ".judge", prompt, 'gpt-4')
     logging.info(f'question_type={question_type}')
 
     ask_full_txt = False
     if ('适合向量搜索的具体问题' in question_type):
         logging.info('适合向量搜索的具体问题')
         file_id = file_id_list[0]
-        full_txt = get_full_txt(file_id)
         try:
-            return embed.ask_doc(file_id_list, query_str, full_txt)
+            return embedchain_util.ask_doc(embedchain_app, file_id_list, query_str)
         except Exception as e:
             if str(e) == 'no_query_result':
+                logging.error('no_query_result')
                 ask_full_txt = True
+            else:
+                logging.error(str(e))
+                return {"code": 500, "msg": str(e)}
+
     else:
         ask_full_txt = True
 
@@ -139,7 +147,7 @@ async def ask_doc(request: Request):
 【问题】:
 {query_str}
 """
-        return await proxy(str(int(time.time())), query_txt, 'gpt-3.5-turbo-16k')
+        return await openai_proxy.proxy(str(int(time.time())), query_txt, 'gpt-3.5-turbo-16k')
 
 
 
@@ -153,7 +161,7 @@ async def chat(request: Request):
     prompt = data.get('prompt')
     user_name = data.get('user')
 
-    return await proxy(user_name + '.chat', prompt, 'gpt-4')
+    return await openai_proxy.proxy(user_name + '.chat', prompt, 'gpt-4')
 
 # ----------------------------------------------------------
 
@@ -191,35 +199,53 @@ async def create_upload_file(background_tasks: BackgroundTasks, files: List[Uplo
     return {"task_id": file_id}
 
 
+@app.post("/api7/embed_local_pdf")
+async def embed_local_pdf(background_tasks: BackgroundTasks, 
+                          file_name:str = Body(...), current_month:str = Body(...), file_id: str = Body(...)):
+    file_ext = '.pdf'
+    new_file_name = str(file_id) + file_ext
+
+    file_url = f'{UPLOAD_URL_FOLDER}{current_month}/{new_file_name}'
+    directory = f"{UPLOAD_LOCAL_FOLDER}{current_month}"
+    os.makedirs(directory, exist_ok=True)
+    local_file_path = f"{directory}/{new_file_name}"
+    file_md5 = generate_md5(local_file_path)
+    txt_content = _get_full_txt(file_id, local_file_path)
+
+    background_tasks.add_task(process_file_task, file_id, file_md5, file_ext, file_name, new_file_name, file_url, local_file_path, txt_content)
+    return {"task_id": file_id}
+
+
 def format_timestamp(file_id):
     return datetime.fromtimestamp(int(file_id)).strftime("%m/%d-%H:%M")
 
 
 task_status = {}
 
-def process_file_task(file_id, file_md5, file_ext, file_name, new_file_name, file_url, local_file_path):
+def process_file_task(file_id, file_md5, file_ext, file_name, new_file_name, file_url, local_file_path, txt_content = None):
 
     task_status[file_id] = 'processing'
-    if (file_ext.lower() == '.pdf'):
-        iter = embed.pdf_to_txt_stream(local_file_path)
-        first = True
-        pages = 0
-        for msg in iter:
-            logging.info(f'msg={msg}')
-            if first and msg:
-                first = False
-                pages = msg.split(',')[0]
-                local_txt_file = msg.split(',')[1]
-                task_status[file_id] = f"总页数: {pages}, 解析第1页文本"
-            else:
-                task_status[file_id] = f'共{pages}页,已解析{msg}/{pages}'
-        txt_content = embed.read_txt_file(local_txt_file)
-    else:
-        task_status[file_id] = '解析文本中'
-        txt_content = embed.notpdf_to_txt_content(file_ext, local_file_path)
+    if txt_content is None:
+        if (file_ext.lower() == '.pdf'):
+            iter = convert_to_txt.pdf_to_txt_stream(local_file_path)
+            first = True
+            pages = 0
+            for msg in iter:
+                logging.info(f'msg={msg}')
+                if first and msg:
+                    first = False
+                    pages = msg.split(',')[0]
+                    local_txt_file = msg.split(',')[1]
+                    task_status[file_id] = f"总页数: {pages}, 解析第1页文本"
+                else:
+                    task_status[file_id] = f'共{pages}页,已解析{msg}/{pages}'
+            txt_content = convert_to_txt.read_txt_file(local_txt_file)
+        else:
+            task_status[file_id] = '解析文本中'
+            txt_content = convert_to_txt.notpdf_to_txt_content(file_ext, local_file_path)
 
     task_status[file_id] = '训练内容中'
-    embed.embed_text(file_id, txt_content)
+    embedchain_util.embed_doc(embedchain_app, file_id, txt_content)
 
     files_db[file_id] = {
         "filename": file_name,
