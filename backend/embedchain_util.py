@@ -1,5 +1,5 @@
 # based on embedchain==0.0.69
-# curl -X POST http://localhost:5007/api7/embed_local_pdf  -H 'Content-Type: application/json' -d '{"file_name":"自由的魂魄所在.pdf", "current_month": "202310", "file_id":"1697611400"}'
+# curl -X POST http://localhost:5007/api7/embed_local_pdf  -H 'Content-Type: application/json' -d '{"file_name":"自由的魂魄所在.pdf", "current_month": "202310", "file_id":"1697615870"}'
 
 import os
 
@@ -43,7 +43,7 @@ class ChineseRecursiveTextSplitter(RecursiveCharacterTextSplitter):
         super().__init__(keep_separator=keep_separator, **kwargs)
         self._separators = separators or [
             "\n\n",
-            "\n",
+            #"\n", # 因为pdf解析出来的换行不是真的换行，只是排版放不下
             "。|！|？",
             "\.\s|\!\s|\?\s",
             "；|;\s",
@@ -121,12 +121,26 @@ import config
 os.environ["OPENAI_API_KEY"] = f"sk-{config.API_KEY}"
 
 
-def embed_doc(app: EcApp, file_id, txt1):
-    txt1_hash = hashlib.md5(str(txt1).encode("utf-8"))
+def embed_doc(app: EcApp, file_id, txt_content):
     chunker = ChineseTextChunker()
     chunker.set_data_type(DataType.TEXT)
-    app.load_and_embed(LocalTextLoader(), chunker, txt1, {'file_id': file_id}, txt1_hash.hexdigest())
-    logging.info(f'app.db.cnt={app.db.count()}')
+    
+    # The input parameter may not take a list longer than 2048 elements (chunks of text).
+    # The total number of tokens across all list elements of the input parameter cannot exceed 1,000,000. 
+    # (Because the rate limit is 1,000,000 tokens per minute.)
+    logging.info(f'len(txt_content)={len(txt_content)}')
+    lst = chunker.text_splitter.split_text(txt_content)
+
+    batch_size = 2000
+    batch_idx = 0
+    for i in range(0, len(lst), batch_size):
+        batch = lst[i:i+batch_size]
+        batch_txt_content = '\n\n'.join(batch)
+        batch_idx += 1
+
+        txt1_hash = hashlib.md5(str(batch_txt_content).encode("utf-8"))
+        app.load_and_embed(LocalTextLoader(), chunker, batch_txt_content, {'file_id': file_id}, txt1_hash.hexdigest())
+        logging.info(f'batch={batch_idx}, app.db.cnt={app.db.count()}')
 
 
 def ask_doc_generator(app:EcApp, file_id_list, query_str):
@@ -146,13 +160,9 @@ def ask_doc_generator(app:EcApp, file_id_list, query_str):
         raise Exception('no_query_result')
     logging.info(f'query db result: {contexts}')
 
-    response = appQuery.llm.query(input_query=query_str, contexts=contexts, config=BaseLlmConfig(stream = True), dry_run=True)
-    logging.info('llm done')
-
+    response = appQuery.llm.query(input_query=query_str, contexts=contexts, config=BaseLlmConfig(stream=True, model='gpt-4'), dry_run=False)
     for s in response:
-        logging.info(f's={s}')
-        if s:
-            yield str(s)
+        yield str(s)
 
 from fastapi.responses import StreamingResponse
 
