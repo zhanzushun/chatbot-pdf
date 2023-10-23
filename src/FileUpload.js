@@ -17,9 +17,9 @@ export const FileUpload = ({ onFileIdList }) => {
     }
     try {
       const response = await axios.post(`${API_HOST_PORT}/api7/uploadfile`, formData);
-      const file_id = response.data.task_id;
       console.log('upload.response=' + JSON.stringify(response.data))
       if ('task_id' in response.data){
+        const file_id = response.data.task_id;
         const es = new EventSource(`${API_HOST_PORT}/api7/status/${file_id}`);
         es.onmessage = (event) => {
             if (event.data === "done") {

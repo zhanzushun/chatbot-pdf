@@ -144,6 +144,8 @@ async def ask_doc(request: Request):
         query_txt = f"""基于文件/书/文章的内容回答【问题】，【文件/书/文章内容】如下:
 {full_txt}
 
+请基于以上【文件/书/文章内容】，回答下面的【问题】
+
 【问题】:
 {query_str}
 """
