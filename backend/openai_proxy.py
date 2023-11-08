@@ -14,7 +14,6 @@ async def proxy_generator(user: str, prompt: str, model: str):
     async with aiohttp.ClientSession() as session:
         async with session.post(URL, json={"prompt":prompt, "user": user, "model": model}) as response:
             async for data in response.content.iter_any():
-                print(data)
                 yield data
 
 async def proxy_sync(user: str, prompt: str, model: str):

@@ -39,7 +39,7 @@ app = FastAPI(timeout=600)
 
 from fastapi.staticfiles import StaticFiles
 
-STATIC_FOLDER_PATH = "/opt/disk2/github/embedchain/static/"
+STATIC_FOLDER_PATH = config.STATIC_DIR
 os.makedirs(STATIC_FOLDER_PATH, exist_ok=True)
 
 app.mount("/api7/static", StaticFiles(directory=STATIC_FOLDER_PATH), name="static")
@@ -113,8 +113,13 @@ async def ask_doc(request: Request):
         logging.info('未选择文件，转发到普通对话')
         return await openai_proxy.proxy(user_name + '.chat', query_str, 'gpt-3.5-turbo')
 
-    prompt = """判断以下输入【问题】的类别，总共有两种类别，一种是【适合向量搜索的具体问题】，另一种是【不适合向量搜索且是概括总结类问题】请仔细分析进行判断。
-你只需要输出最终答案，无需给出分析过程，最终答案采用json格式返回，格式为 {"类别":"适合向量搜索的具体问题"} 或者 {"类别":"不适合向量搜索且是概括总结类问题"}。【问题】如下: """
+    prompt = """判断以下输入【问题】的类别，总共有两种类别，一种是【适合向量搜索的具体问题】，另一种是【未指定任何具体信息的全文总结类问题】请仔细分析进行判断。
+你只需要输出最终答案，无需给出分析过程，最终答案采用json格式返回，格式为 {"类别":"适合向量搜索的具体问题"} 或者 {"类别":"未指定任何具体信息的全文总结类问题"}
+注： 问题中出现具体的任何名词、实体、具体页吗、具体段落、具体标题都属于【适合向量搜索的具体问题】
+如问题‘详细总结关于 inequality and economics 的观点’属于【适合向量搜索的具体问题】
+如问题‘基于命名实体识别构建内容摘要‘ 属于【未指定任何具体信息的全文总结类问题】
+
+【问题】如下: """
     prompt = prompt + query_str
 
     question_type = await openai_proxy.proxy_sync(user_name + ".judge", prompt, 'gpt-4')
@@ -149,7 +154,7 @@ async def ask_doc(request: Request):
 【问题】:
 {query_str}
 """
-        return await openai_proxy.proxy(str(int(time.time())), query_txt, 'gpt-3.5-turbo-16k')
+        return await openai_proxy.proxy(str(int(time.time())), query_txt, 'gpt-3.5-turbo')
 
 
 
