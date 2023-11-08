@@ -100,6 +100,28 @@ def _get_full_txt(file_id, local_file_path):
     return convert_to_txt.read_txt_file(local_file_path)
 
 
+import re
+import json
+from typing import List, Union
+
+def extract_json(s: str) -> Union[dict, None]:
+    # 正则表达式匹配最外层的大括号包围的内容，即JSON对象
+    matches = re.findall(r'{.*?}', s, re.DOTALL)
+    if matches:
+        # 假设最后一个匹配项是我们需要的JSON对象
+        json_str = matches[-1]
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            print("Found JSON is not valid.")
+    return None
+
+def parse_pages_from_json(json_obj: dict) -> List[int]:
+    if "pages" in json_obj and isinstance(json_obj["pages"], list):
+        return json_obj["pages"]
+    return []
+
+
 @app.post("/api7/askdoc")
 async def ask_doc(request: Request):
     data = await request.body()
@@ -113,22 +135,36 @@ async def ask_doc(request: Request):
         logging.info('未选择文件，转发到普通对话')
         return await openai_proxy.proxy(user_name + '.chat', query_str, 'gpt-3.5-turbo')
 
-    prompt = """判断以下输入【问题】的类别，总共有两种类别，一种是【适合向量搜索的具体问题】，另一种是【未指定任何具体信息的全文总结类问题】请仔细分析进行判断。
-你只需要输出最终答案，无需给出分析过程，最终答案采用json格式返回，格式为 {"类别":"适合向量搜索的具体问题"} 或者 {"类别":"未指定任何具体信息的全文总结类问题"}
-注： 问题中出现具体的任何名词、实体、具体页吗、具体段落、具体标题都属于【适合向量搜索的具体问题】
-如问题‘详细总结关于 inequality and economics 的观点’属于【适合向量搜索的具体问题】
-如问题‘基于命名实体识别构建内容摘要‘ 属于【未指定任何具体信息的全文总结类问题】
+    prompt = """判断以下输入【问题】的类别，总共有三种类别: 
+    1.【适合向量搜索的具体问题】
+    2.【指定页面问题】
+    3.【未指定任何具体信息的全文总结类问题】
+    问题中出现指定页面，则属于【指定页面问题】
+    问题中出现具体的任何名词、实体、具体段落、具体标题都属于【适合向量搜索的具体问题】
+
+你只需要输出最终答案，无需给出分析过程，最终答案采用json格式返回，格式为
+{"类别":"适合向量搜索的具体问题"}
+或者 {"类别":"未指定任何具体信息的全文总结类问题"}
+或者 {"类别":"指定页面问题", "pages":[17,23]}
+
+举例:
+    '详细总结关于 inequality and economics 的观点', 返回json: {"类别":"适合向量搜索的具体问题"}
+    '基于命名实体识别构建内容摘要', 返回json: {"类别":"未指定任何具体信息的全文总结类问题"}
+    '总结第17页到第18页 What Caused Elite Polarization? 下的7个观点', 返回json: {"类别":"指定页面问题", "pages": [17,18]}
 
 【问题】如下: """
     prompt = prompt + query_str
 
-    question_type = await openai_proxy.proxy_sync(user_name + ".judge", prompt, 'gpt-4')
-    logging.info(f'question_type={question_type}')
+    try:
+        question_type = await openai_proxy.proxy_sync(user_name + ".judge", prompt, 'gpt-4')
+        logging.info(f'question_type={question_type}')
+    except Exception as e:
+        return f'Exception: {e}'
 
     ask_full_txt = False
+    file_id = file_id_list[0]
     if ('适合向量搜索的具体问题' in question_type):
         logging.info('适合向量搜索的具体问题')
-        file_id = file_id_list[0]
         try:
             return await embedchain_util.ask_doc(user_name + '.ask_doc', embedchain_app, file_id_list, query_str)
         except Exception as e:
@@ -139,12 +175,17 @@ async def ask_doc(request: Request):
                 logging.error(str(e))
                 return {"code": 500, "msg": str(e)}
 
+    elif ('指定页面问题' in question_type):
+        json_obj = extract_json(question_type)
+        page_index_list = parse_pages_from_json(json_obj)
+        return await embedchain_util.ask_doc_context(user_name + '.ask_doc', 
+            embedchain_util.get_context_list(file_id, page_index_list), query_str)
+    
     else:
         ask_full_txt = True
 
     if ask_full_txt:
         logging.info('概括总结类问题')
-        file_id = file_id_list[0]
         full_txt = get_full_txt(file_id)
         query_txt = f"""基于文件/书/文章的内容回答【问题】，【文件/书/文章内容】如下:
 {full_txt}

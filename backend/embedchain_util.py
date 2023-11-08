@@ -167,14 +167,25 @@ def embed_doc(app: EcApp, file_id, txt_content):
         logging.info(f'process page_index = {page_index}')
         page_index_copy = page_index
         page_index += 1
-        _save_page(file_id, page_index_copy, text_page)
+
+        page_number = -1
+        try:
+            page_number = int(text_page[1:text_page.find('页')])
+        except:
+            logging.exception(f'page_index={page_index_copy}, failed to find page_number')
+        if page_number == -1:
+            page_index_key = 'page_index_' + str(page_index_copy)
+        else:
+            page_index_key = str(page_number)
+
+        _save_page(file_id, page_index_key, text_page)
         if (_is_index_page(text_page)):
-            logging.warn(f'this is an index page, just ignore! page_index={page_index_copy}')
+            logging.warn(f'忽略索引! page_index={page_index_copy}, page_number={page_number}')
             continue
 
         txt1_hash = hashlib.md5(str(text_page).encode("utf-8"))
         _1,_2,_3,_4 = app.load_and_embed(LocalTextLoader(), chunker, text_page, 
-            {'file_id': file_id, 'page_index': page_index_copy}, txt1_hash.hexdigest())
+            {'file_id': file_id, 'page_index': page_index_key}, txt1_hash.hexdigest())
         for doc in _1:
             logging.info(f'doc.size={len(doc)}, doc.content={doc}')
         logging.info(f'app.db.cnt={app.db.count()}')
@@ -219,10 +230,6 @@ def query_doc(app:EcApp, file_id_list, query_str):
             continue
         if (file_id, page_index) not in page_list:
             page_list.append((file_id, page_index))
-        # if (file_id, page_index-1) not in page_list:
-        #     page_list.append((file_id, page_index-1))
-        # if (file_id, page_index+1) not in page_list:
-        #     page_list.append((file_id, page_index+1))
     
     logging.info(f'page_list={page_list}')
     for (file_id, page_index) in page_list:
@@ -240,8 +247,23 @@ from fastapi.responses import StreamingResponse
 import openai_proxy
 
 async def ask_doc(user_name, ecapp, file_id_list, query_str) -> StreamingResponse:
-
     context_list = query_doc(ecapp, file_id_list, query_str)
+    return await ask_doc_context(user_name, context_list, query_str)
+
+
+def get_context_list(file_id, page_index_list):
+    context_list = []
+    for page_index in page_index_list:
+        c1 = _load_page(file_id, page_index)
+        if c1:
+            context_list.append(c1)
+    if len(context_list) == 0:
+        raise Exception('no_query_result')
+    return context_list
+
+
+async def ask_doc_context(user_name, context_list, query_str) -> StreamingResponse:
+
     prompt = f"""
   Use the following pieces of context to answer the query at the end.
   If you don't know the answer, just say that you don't know, don't try to make up an answer.
@@ -255,7 +277,6 @@ async def ask_doc(user_name, ecapp, file_id_list, query_str) -> StreamingRespons
     logging.info(f'prompt={prompt[:1000]}')
     #return prompt
     return await openai_proxy.proxy(user_name, prompt, 'gpt-3.5-turbo')
-
 
 from embedchain.config import ChromaDbConfig
 
