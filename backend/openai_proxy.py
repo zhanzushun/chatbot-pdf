@@ -13,7 +13,7 @@ async def proxy(user, prompt, model) -> StreamingResponse:
 async def proxy_generator(user: str, prompt: str, model: str):
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.post(URL, json={"prompt":prompt, "user": user, "model": model}) as response:
+            async with session.post(URL, json={"prompt":prompt, "user": user, "user_group": "marvin", "model": model}) as response:
                 async for data in response.content.iter_any():
                     yield data
         except Exception as e:
@@ -21,5 +21,5 @@ async def proxy_generator(user: str, prompt: str, model: str):
 
 async def proxy_sync(user: str, prompt: str, model: str):
     async with aiohttp.ClientSession() as session:
-        async with session.post(URL, json={"prompt":prompt, "user": user, "model": model}) as response:
+        async with session.post(URL, json={"prompt":prompt, "user": user, "user_group": "marvin", "model": model}) as response:
             return await response.text()
