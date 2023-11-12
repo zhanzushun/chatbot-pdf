@@ -163,31 +163,31 @@ async def ask_doc(request: Request):
 
     ask_full_txt = False
     file_id = file_id_list[0]
-    if ('适合向量搜索的具体问题' in question_type):
-        logging.info('适合向量搜索的具体问题')
-        try:
+
+    try:
+        if ('适合向量搜索的具体问题' in question_type):
+            logging.info('适合向量搜索的具体问题')
             return await embedchain_util.ask_doc(user_name + '.ask_doc', embedchain_app, file_id_list, query_str)
-        except Exception as e:
-            if str(e) == 'no_query_result':
-                logging.error('no_query_result')
-                ask_full_txt = True
-            else:
-                logging.error(str(e))
-                return {"code": 500, "msg": str(e)}
-
-    elif ('指定页面问题' in question_type):
-        json_obj = extract_json(question_type)
-        page_index_list = parse_pages_from_json(json_obj)
-        return await embedchain_util.ask_doc_context(user_name + '.ask_doc', 
-            embedchain_util.get_context_list(file_id, page_index_list), query_str)
+        
+        elif ('指定页面问题' in question_type):
+            json_obj = extract_json(question_type)
+            page_number_list = parse_pages_from_json(json_obj)
+            return await embedchain_util.ask_doc_context(user_name + '.ask_doc', 
+                embedchain_util.get_context_list(file_id, page_number_list), query_str)
+        else:
+            logging.info('概括总结类问题')
+        
+    except Exception as e:
+        if str(e) == 'no_query_result':
+            logging.error('no_query_result')
+            logging.info('未找到答案，则发送全文')
+        else:
+            logging.error(str(e))
+            return {"code": 500, "msg": str(e)}
     
-    else:
-        ask_full_txt = True
-
-    if ask_full_txt:
-        logging.info('概括总结类问题')
-        full_txt = get_full_txt(file_id)
-        query_txt = f"""基于文件/书/文章的内容回答【问题】，【文件/书/文章内容】如下:
+    # 最后全文提问
+    full_txt = get_full_txt(file_id)
+    query_txt = f"""基于文件/书/文章的内容回答【问题】，【文件/书/文章内容】如下:
 {full_txt}
 
 请基于以上【文件/书/文章内容】，回答下面的【问题】
@@ -195,7 +195,7 @@ async def ask_doc(request: Request):
 【问题】:
 {query_str}
 """
-        return await openai_proxy.proxy(str(int(time.time())), query_txt, 'gpt-3.5-turbo')
+    return await openai_proxy.proxy(str(int(time.time())), query_txt, 'gpt-3.5-turbo')
 
 
 

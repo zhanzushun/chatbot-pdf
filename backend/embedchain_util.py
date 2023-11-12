@@ -43,7 +43,7 @@ class ChineseRecursiveTextSplitter(RecursiveCharacterTextSplitter):
         super().__init__(keep_separator=keep_separator, **kwargs)
         self._separators = separators or [
             "\n\n",
-            #"\n", # 因为pdf解析出来的换行不是真的换行，只是排版放不下
+            "\n",
             "。|！|？",
             "\.\s|\!\s|\?\s",
             "；|;\s",
@@ -136,6 +136,7 @@ def _load_page(file_id, page_index):
     return None
 
 import re
+import uuid
 index_number_pattern = re.compile(r'^\d+')
 http_pattern = re.compile(r'http')
 
@@ -160,6 +161,15 @@ def embed_doc(app: EcApp, file_id, txt_content):
     chunker.set_data_type(DataType.TEXT)
     
     text_pages = txt_content.split('<|startofpage|>')
+
+    if len(text_pages) == 1: # 未分页的文章, 按大段分页
+        parent_splitter = ChineseRecursiveTextSplitter(chunk_size=2000)
+        documents = parent_splitter.split_text(txt_content)
+        for _i, _doc in enumerate(documents):
+            page_index_key = f'{_i}_{str(uuid.uuid4())}'
+            _save_page(file_id, page_index_key, _doc)
+            _embed_one_page(app, chunker, file_id, _doc, page_index_key)
+
     text_pages = text_pages[1:]
 
     page_index = 0
@@ -176,19 +186,23 @@ def embed_doc(app: EcApp, file_id, txt_content):
         if page_number == -1:
             page_index_key = 'page_index_' + str(page_index_copy)
         else:
-            page_index_key = str(page_number)
+            page_index_key = 'page_number_' + str(page_number)
 
         _save_page(file_id, page_index_key, text_page)
         if (_is_index_page(text_page)):
             logging.warn(f'忽略索引! page_index={page_index_copy}, page_number={page_number}')
             continue
+        _embed_one_page(app, chunker, file_id, text_page, page_index_key)
 
-        txt1_hash = hashlib.md5(str(text_page).encode("utf-8"))
-        _1,_2,_3,_4 = app.load_and_embed(LocalTextLoader(), chunker, text_page, 
-            {'file_id': file_id, 'page_index': page_index_key}, txt1_hash.hexdigest())
-        for doc in _1:
-            logging.info(f'doc.size={len(doc)}, doc.content={doc}')
-        logging.info(f'app.db.cnt={app.db.count()}')
+
+def _embed_one_page(app, chunker, file_id, text_page, page_index_key):
+    txt1_hash = hashlib.md5(str(text_page).encode("utf-8"))
+    _1,_2,_3,_4 = app.load_and_embed(LocalTextLoader(), chunker, text_page, 
+        {'file_id': file_id, 'page_index': page_index_key}, txt1_hash.hexdigest())
+    logging.info(f'start page_key={page_index_key}, page.docs.size={len(_1)}')
+    for i,doc in enumerate(_1):
+        logging.info(f'page.docs[{i}], doc.size={len(doc)}, doc.content={doc}')
+    logging.info(f'end page_key={page_index_key}, page.docs.size={len(_1)}, app.db.cnt={app.db.count()}')
 
 
 def query_doc(app:EcApp, file_id_list, query_str):
@@ -251,10 +265,10 @@ async def ask_doc(user_name, ecapp, file_id_list, query_str) -> StreamingRespons
     return await ask_doc_context(user_name, context_list, query_str)
 
 
-def get_context_list(file_id, page_index_list):
+def get_context_list(file_id, page_number_list):
     context_list = []
-    for page_index in page_index_list:
-        c1 = _load_page(file_id, page_index)
+    for page_number in page_number_list:
+        c1 = _load_page(file_id, 'page_number_' + str(page_number))
         if c1:
             context_list.append(c1)
     if len(context_list) == 0:
@@ -276,7 +290,7 @@ async def ask_doc_context(user_name, context_list, query_str) -> StreamingRespon
 """
     logging.info(f'prompt={prompt[:1000]}')
     #return prompt
-    return await openai_proxy.proxy(user_name, prompt, 'gpt-3.5-turbo')
+    return await openai_proxy.proxy(user_name, prompt, 'gpt-4')
 
 from embedchain.config import ChromaDbConfig
 
