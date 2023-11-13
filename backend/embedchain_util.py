@@ -103,7 +103,7 @@ class ChineseTextChunker(BaseChunker):
     """Chunker for text."""
     def __init__(self):
         text_splitter = ChineseRecursiveTextSplitter(
-            chunk_size=200,
+            chunk_size=150,
             chunk_overlap=0,
             length_function=len,
         )
@@ -163,7 +163,7 @@ def embed_doc(app: EcApp, file_id, txt_content):
     text_pages = txt_content.split('<|startofpage|>')
 
     if len(text_pages) == 1: # 未分页的文章, 按大段分页
-        parent_splitter = ChineseRecursiveTextSplitter(chunk_size=2000)
+        parent_splitter = ChineseRecursiveTextSplitter(chunk_size=1000)
         documents = parent_splitter.split_text(txt_content)
         for _i, _doc in enumerate(documents):
             page_index_key = f'{_i}_{str(uuid.uuid4())}'
