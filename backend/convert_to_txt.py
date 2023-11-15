@@ -8,7 +8,7 @@ import sseclient
 from urllib.parse import urlencode
 
 
-os.environ["OPENAI_API_KEY"] = f"sk-{config.API_KEY}"
+os.environ["OPENAI_API_KEY"] = f"sk-{config.API_KEY}" # for audio
 
 
 def read_txt_file(file_path):

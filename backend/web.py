@@ -82,7 +82,6 @@ import openai_proxy
 import convert_to_txt
 import embedchain_util
 
-embedchain_app = embedchain_util.create_embedchain_app(config.APP_NAME + "_db")
 
 def get_full_txt(file_id):
     file_url = files_db[str(file_id)]['url']
@@ -167,7 +166,7 @@ async def ask_doc(request: Request):
     try:
         if ('适合向量搜索的具体问题' in question_type):
             logging.info('适合向量搜索的具体问题')
-            return await embedchain_util.ask_doc(user_name + '.ask_doc', embedchain_app, file_id_list, query_str)
+            return await embedchain_util.ask_doc(user_name + '.ask_doc', file_id_list, query_str)
         
         elif ('指定页面问题' in question_type):
             json_obj = extract_json(question_type)
@@ -293,7 +292,7 @@ def process_file_task(file_id, file_md5, file_ext, file_name, new_file_name, fil
             txt_content = convert_to_txt.notpdf_to_txt_content(file_ext, local_file_path)
 
     task_status[file_id] = '训练内容中'
-    embedchain_util.embed_doc(embedchain_app, file_id, txt_content)
+    embedchain_util.embed_doc(file_id, txt_content)
 
     files_db[file_id] = {
         "filename": file_name,
