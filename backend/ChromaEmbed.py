@@ -14,6 +14,8 @@ def _create_chunks(text_splitter: ChineseRecursiveTextSplitter, text_content: st
 
     for chunk in chunks:
         chunk_id = hashlib.sha256((chunk + str(metadata)).encode()).hexdigest()
+        if (chunk_id in chunk_ids):
+            continue
         chunk_ids.append(chunk_id)
         documents.append(chunk)
         metadatas.append(metadata)

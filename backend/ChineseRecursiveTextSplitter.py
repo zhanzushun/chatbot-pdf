@@ -34,7 +34,7 @@ class ChineseRecursiveTextSplitter(RecursiveCharacterTextSplitter):
         super().__init__(keep_separator=keep_separator, **kwargs)
         self._separators = separators or [
             "\n\n",
-            "\n",
+            # "\n", # 很多pdf解析出来的文字换行是原始换行在句子中间，并不表示是分段
             "。|！|？",
             "\.\s|\!\s|\?\s",
             "；|;\s",

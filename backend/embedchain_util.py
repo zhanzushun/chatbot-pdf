@@ -19,16 +19,17 @@ import re
 index_number_pattern = re.compile(r'^\d+')
 http_pattern = re.compile(r'http')
 
-def is_index_page(page_text, number_threshold=0.3, http_threshold=0.2):
+def is_index_page(page_text, number_threshold=0.35, http_cnt_threshold=5):
     lines = page_text.strip().split('\n')
-    # 计算行首数字的行数和含http的行数
-    number_lines = sum(bool(index_number_pattern.search(line)) for line in lines)
-    http_lines = sum(bool(http_pattern.search(line)) for line in lines)
-    # 计算行首数字和含http的行数是否分别超过行数的阈值
-    number_ratio = number_lines / len(lines)
-    http_ratio = http_lines / len(lines)
-    return number_ratio >= number_threshold and http_ratio >= http_threshold
 
+    number_lines = sum(bool(index_number_pattern.search(line)) for line in lines)
+    http_cnt = page_text.count('http')
+    logging.info(f'is_index_page, lines={len(lines)}, number_lines={number_lines}, http_lines={http_cnt}')
+
+    number_ratio = number_lines / len(lines)
+    if (number_ratio >= number_threshold and http_cnt >= http_cnt_threshold):
+        return True
+    return False
 
 def _save_page(file_id, page_index, page_text):
     os.makedirs(config.STATIC_DIR, exist_ok=True)
@@ -83,7 +84,7 @@ def embed_doc(file_id, txt_content):
         page_index += 1
 
         if text_page.strip() == '':
-            logging.info(f'ignore empty page, page_index={page_index}')
+            logging.info(f'ignore empty page, page_index={page_index_copy}')
             continue
 
         page_number = -1
